@@ -1,0 +1,144 @@
+/*
+     Project:   Simple Digital Clock
+     Hardware:  Arduino UNO R3 - RTC DS3231 - MAX72xx LED Matrix
+     Version:   Rev 1.4
+     Date:      26.Feb.2019
+     Author:    LAGSILVA
+     License:   CC BY-NC-ND 4.0
+                (Attribution-NonCommercial-NoDerivatives 4.0 International)
+*/
+
+#include <LedControl.h>                 // Library for LED Matrix - MAX72XX
+#include <Wire.h>                       // Library for DS1307RTC - Pins of Arduino UNO: A4 (SDA), A5 (SCL)
+#include <DS3232RTC.h>
+#include <Time.h>                       // Library for Time
+#include <TimeLib.h>
+#define DS3232_I2C_ADDRESS 0x68         // I2C address (RTC)
+
+// Global Variables
+int lapse = 735;   // 735ms = (8000ms - 25ms * 5 * 8 * 2) / 8 - 15 = 750ms - 15(compensation value)
+
+/*
+  Pin numbers do Arduino para conexao com o MAX72XX (matriz de LED com controlador MAX72XX)
+  pin 5 is connected to the DataIn (DIN)
+  pin 6 is connected to LOAD (CS)
+  pin 7 is connected to the CLK (CLK)
+*/
+
+LedControl lc = LedControl(5, 7, 6, 1);  // LedControl(int dataPin, int clkPin, int csPin, int numDevices)
+
+// Array of Digits - 0 a 9 - Size 5x3
+
+byte num[10][3] = {
+
+  // Conventional Font type
+
+  {0xF8, 0x88, 0xF8}, // 0
+  {0xF8, 0x00, 0x00}, // 1
+  {0xE8, 0xA8, 0xB8}, // 2
+  {0xF8, 0xA8, 0xA8}, // 3
+  {0xF8, 0x20, 0xE0}, // 4
+  {0xB8, 0xA8, 0xE8}, // 5
+  {0x38, 0x28, 0xF8}, // 6
+  {0xF8, 0x80, 0x80}, // 7
+  {0xF8, 0xA8, 0xF8}, // 8
+  {0xF8, 0xA0, 0xE0}, // 9
+
+};
+
+
+void setup() {
+
+  // Setup of Display "0"
+  lc.shutdown(0, false);                // Wakeup Display "0"
+  lc.setIntensity(0, 8);                // Set the Brightness of Display (0 to 15)
+  lc.clearDisplay(0);                   // Clear Display "0"
+
+  setSyncProvider(RTC.get);             // Function to read RTC (Real Time Clock)
+  setSyncInterval(60);                  // Set the number of seconds between re-sync
+  //setTime(19, 42, 00, 26, 02, 2019);    // Set the Time and Date
+  //RTC.set(now());                       // Set the RTC time
+
+}
+
+
+void loop() {
+
+  byte h, m, s, dd, mm, yy;
+  long tC, tF;
+
+  h = hour();
+  m = minute();
+  s = second();
+  dd = day();
+  mm = month();
+  yy = year() % 100;
+
+  // Plot Hour
+  plotNum(h, 7);
+
+  // Plot Minute
+  plotNum(m, 6);
+
+  // Plot Second
+  plotNum(s, 5);
+
+  // Plot Day
+  plotNum(dd, 4);
+
+  // Plot Month
+  plotNum(mm, 3);
+
+  // Plot Year
+  plotNum(yy, 2);
+
+  // Plot Temperature (C)    // Celsius degrees
+  tC = RTC.temperature() / 4;
+  plotNum(tC, 1);
+
+  // Plot Temperature (F)    // Fahrenheit degrees
+  tF = tC * 1.8 + 32;
+  plotNum(tF, 0);
+
+}
+
+
+void plotNum (byte temp, byte stat) {
+
+  byte tens = temp % 10;
+  byte units = temp / 10;
+  byte wd = weekday();
+
+  wd = (9 - wd) % 7;
+
+  if (wd == 0) {
+    wd = 7;
+  }
+
+  for (byte i = 7; i >= 3; i--) {
+    for (byte k = 0; k < 3; k++) {
+      lc.setRow(0, k + 5, num[units][k] >> i);
+      lc.setRow(0, k + 1, num[tens][k] >> i);
+    }
+    delay(25);
+  }
+
+  lc.setLed(0, stat, 0, true);            // Plot Status
+
+  if (stat >= 2 && stat <= 4) {
+    lc.setLed(0, wd, 1, true);            // Plot Weekday
+  }
+
+  delay(lapse);                           // Time delay between modes
+
+  lc.clearDisplay(0);                     // Clear display
+
+  for (byte i = 4; i <= 8; i++) {
+    for (byte k = 0; k < 3; k++) {
+      lc.setRow(0, k + 5, num[units][k] >> i);
+      lc.setRow(0, k + 1, num[tens][k] >> i);
+    }
+    delay(25);
+  }
+
+}
